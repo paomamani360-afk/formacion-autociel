@@ -1,62 +1,66 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
-# Configuración de ancho de pantalla
+# Configuración de la página
 st.set_page_config(layout="wide", page_title="Dashboard Formación Autociel")
 
-# Estilo CSS para que se parezca a tu imagen (azul oscuro y blanco)
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    [data-testid="stMetricValue"] { font-size: 25px; color: #1e3d59; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- CARGA DE DATOS ---
+# --- CONEXIÓN A LOS DATOS ---
 SHEET_ID = "11yH6PUYMpt-m65hFH9t2tWSEgdRpLOCFR3OFjJtWToQ"
-# GID de la pestaña "NOMINA REAL DE AUTOCIEL"
-URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=870107738"
+# GID de la hoja "NOMINA REAL DE AUTOCIEL"
+URL_NOMINA = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=870107738"
 
 @st.cache_data
 def load_data():
-    return pd.read_csv(URL)
+    # Cargamos la nómina real
+    df = pd.read_csv(URL_NOMINA)
+    return df
 
-df = load_data()
+try:
+    df_raw = load_data()
 
-# --- SIDEBAR (Filtros de tu imagen) ---
-st.sidebar.title("Filtros")
-area = st.sidebar.multiselect("Área", ["Posventa", "Venta"])
-cargo = st.sidebar.multiselect("Cargo", df['Cargo'].unique() if 'Cargo' in df.columns else [])
-niveles = st.sidebar.multiselect("Niveles 1 y 2", ["Nivel 1", "Nivel 2"])
+    # --- BARRA LATERAL (FILTROS) ---
+    st.sidebar.header("Filtros de Búsqueda")
+    
+    # Filtro de Áreas (basado en la columna 'Area' de tu sheet)
+    list_areas = df_raw['Area'].unique().tolist() if 'Area' in df_raw.columns else []
+    selected_areas = st.sidebar.multiselect("Filtrar por Áreas:", list_areas)
 
-# --- CUERPO PRINCIPAL ---
-st.title("📊 Indicadores de Formación")
+    # Filtro de Cargos
+    list_cargos = df_raw['Cargo'].unique().tolist() if 'Cargo' in df_raw.columns else []
+    selected_cargos = st.sidebar.multiselect("Filtrar por Figura/Cargo:", list_cargos)
 
-# Fila de Tarjetas (Como en tu imagen 2)
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.metric("Posventa", "72%", "Avance Total")
-    st.metric("Venta", "73%", "Avance Total")
-with c2:
-    st.metric("Nivel 1", "66%", "Posventa")
-    st.metric("Nivel 1", "67%", "Venta")
-with c3:
-    st.metric("Cant. Colaboradores", "23")
-    st.write("**Figuras Obligatorias:** 15")
-with c4:
-    st.metric("Ausentismo", "0%")
-    st.write("**Figuras Opcionales:** 8")
+    # Buscador por nombre
+    search_user = st.sidebar.text_input("Buscar Colaborador por nombre:")
 
-st.divider()
+    # Aplicar Filtros
+    df_filt = df_raw.copy()
+    if selected_areas:
+        df_filt = df_filt[df_filt['Area'].isin(selected_areas)]
+    if selected_cargos:
+        df_filt = df_filt[df_filt['Cargo'].isin(selected_cargos)]
+    if search_user:
+        df_filt = df_filt[df_filt['Nombre'].str.contains(search_user, case=False, na=False)]
 
-# Tabla de cursos (Como en tu imagen 1 y 2)
-st.subheader("Cursos por Colaborador y Estado")
-# Aquí filtramos si hay datos, si no, mostramos el dataframe base
-st.dataframe(df, use_container_width=True)
+    # --- DISEÑO DEL DASHBOARD ---
+    st.title("📊 Indicadores de Formación - Autociel")
 
-# Gráfico de Avance (Como el de tu imagen 1)
-st.subheader("% Avance de Certificación")
-fig = px.bar(df, x="Cargo", y="Capacitaciones" if "Capacitaciones" in df.columns else None, 
-             color_discrete_sequence=['#45ada8'])
-st.plotly_chart(fig, use_container_width=True)
+    # Fila 1: Métricas Principales
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Avance Posventa", "72%", help="Porcentaje de cumplimiento área Posventa")
+    with col2:
+        st.metric("Avance Ventas", "73%", help="Porcentaje de cumplimiento área Ventas")
+    with col3:
+        st.metric("Colaboradores", len(df_filt))
+    with col4:
+        st.metric("Pendientes", "23")
+
+    st.divider()
+
+    # Fila 2: Tabla de Datos
+    st.subheader("📋 Detalle de Cursos y Seguimiento")
+    st.dataframe(df_filt, use_container_width=True)
+
+except Exception as e:
+    st.error(f"Error al cargar los datos: {e}")
+    st.info("Asegúrate de que el Google Sheet esté compartido como 'Cualquier persona con el enlace puede leer'.")
